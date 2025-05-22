@@ -67,36 +67,56 @@ chrome.tabs.onActivated.addListener(function (activeInfo) {
     console.log(
       `Switched AWAY from focus tab ${focusTabId} to tab ${activeInfo.tabId}`
     );
-    // Set the drift alarm
-    // Check if an alarm already exists to avoid resetting it unnecessarily if multiple 'away' events fire quickly (optional)
-    // For simplicity now, we just create/replace it.
-    console.log(
-      `Setting drift alarm for ${TEST_DELAY_MILLISECONDS / 1000} seconds.`
-    );
-    chrome.alarms.create(DRIFT_ALARM_NAME, {
-      when: Date.now() + TEST_DELAY_MILLISECONDS,
-    });
-  }
-});
+
+    // Get stored total seconds or use a default
+    chrome.storage.local.get(["totalDriftSeconds"], function (result) {
+      let actualDriftSeconds = result.totalDriftSeconds;
+
+      // TEST_DELAY_MILLISECONDS was 10 seconds.
+      // MINIMUM_TOTAL_SECONDS in popup is 5 seconds.
+      // Default to TEST_DELAY_MILLISECONDS / 1000 if nothing valid is found.
+      const defaultSecondsForAlarm = TEST_DELAY_MILLISECONDS / 1000;
+
+      if (
+        typeof actualDriftSeconds !== "number" ||
+        isNaN(actualDriftSeconds) ||
+        actualDriftSeconds < defaultSecondsForAlarm / 2
+      ) {
+        // ensure it's a reasonable minimum
+        actualDriftSeconds = defaultSecondsForAlarm;
+        console.log(
+          `Using default/test delay of ${actualDriftSeconds} seconds because no valid user setting found or setting was too small.`
+        );
+      }
+
+      const delayInMilliseconds = actualDriftSeconds * 1000;
+
+      console.log(
+        `Setting drift alarm for ${actualDriftSeconds} seconds (when: ${
+          Date.now() + delayInMilliseconds
+        }).`
+      );
+      chrome.alarms.create(DRIFT_ALARM_NAME, {
+        when: Date.now() + delayInMilliseconds,
+      }); // Closes chrome.alarms.create
+    }); // Closes callback for chrome.storage.local.get
+  } // Closes 'else' block
+}); // Closes chrome.tabs.onActivated.addListener
 
 // Listener for when an alarm goes off
 chrome.alarms.onAlarm.addListener(function (alarm) {
   console.log("Alarm fired:", alarm);
   if (alarm.name === DRIFT_ALARM_NAME) {
     console.log("Drift alarm triggered!");
-    // Check if we are still supposed to be monitoring this tab
-    // (e.g., user hasn't manually deactivated Drift or closed the tab)
-    // For now, focusTabUrl check is a simple proxy for this.
     if (focusTabUrl) {
       chrome.notifications.create(
         NOTIFICATION_ID,
         {
           type: "basic",
-          iconUrl: "icons/icon128.png", // Make sure this icon exists
+          iconUrl: "icons/icon128.png",
           title: "Stay Focused!",
-          message: `Time to return to: ${focusTabUrl.substring(0, 100)}`, // Show part of URL
-          priority: 2, // Range from -2 to 2
-          // requireInteraction: true, // Optional: makes notification stay until user interacts
+          message: `Time to return to: ${focusTabUrl.substring(0, 100)}`,
+          priority: 2,
         },
         function (notificationId) {
           if (chrome.runtime.lastError) {
@@ -114,11 +134,6 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
         "FocusTabUrl not set (or Drift deactivated), so not showing notification from alarm."
       );
     }
-    // Optional: After showing notification, do you want to clear focusTabId?
-    // If so, the user would need to re-activate Drift.
-    // focusTabId = null;
-    // focusTabUrl = null;
-    // chrome.storage.local.remove(['focusTabId', 'focusTabUrl']);
   }
 });
 
@@ -130,8 +145,7 @@ chrome.tabs.onRemoved.addListener(function (tabId, removeInfo) {
     );
     focusTabId = null;
     focusTabUrl = null;
-    chrome.alarms.clear(DRIFT_ALARM_NAME); // Clear the alarm
-    // Also clear the notification if it happens to be showing (though less likely here)
+    chrome.alarms.clear(DRIFT_ALARM_NAME);
     chrome.notifications.clear(NOTIFICATION_ID);
     chrome.storage.local.remove(["focusTabId", "focusTabUrl"], function () {
       if (chrome.runtime.lastError) {
@@ -146,19 +160,10 @@ chrome.tabs.onRemoved.addListener(function (tabId, removeInfo) {
   }
 });
 
-// Listener for when the focus tab URL changes (e.g. navigation within the same tab)
+// Listener for when the focus tab URL changes
 chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
-  // We only care if the URL changes for our specific focusTabId
   if (tabId === focusTabId && changeInfo.url) {
     console.log(`Focus tab ${tabId} URL updated to: ${changeInfo.url}`);
     focusTabUrl = changeInfo.url;
-    // If the popup is open, it will read from storage. If we want the background's version
-    // of focusTabUrl to be the absolute source of truth for notifications, this is fine.
-    // Optionally, update it in storage if other parts of the extension rely on storage for this.
-    // chrome.storage.local.set({ focusTabUrl: changeInfo.url }, function() {
-    //   if (chrome.runtime.lastError) {
-    //     console.error("Error updating focusTabUrl in storage:", chrome.runtime.lastError.message);
-    //   }
-    // });
   }
 });

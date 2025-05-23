@@ -3,13 +3,12 @@
 console.log("Drift: content.js - Script started.");
 
 let videoPauseTimer = null;
-const VIDEO_PAUSE_TIMEOUT_MS = 7000; // 7 seconds for testing
+// Remove or comment out: const VIDEO_PAUSE_TIMEOUT_MS = 7000;
+const DEFAULT_VIDEO_PAUSE_SECONDS_CONTENT_SCRIPT = 10; // Fallback in content script if no setting found
 
 function findVideoElement() {
   // console.log("Drift: content.js - Attempting to find video element with 'video.html5-main-video'.");
   const videoElement = document.querySelector("video.html5-main-video");
-  // if (videoElement) console.log("Drift: content.js - Found video element:", videoElement);
-  // else console.log("Drift: content.js - Video element 'video.html5-main-video' NOT found.");
   return videoElement;
 }
 
@@ -31,44 +30,64 @@ function attachToVideo(videoElement) {
 
   videoElement.addEventListener("pause", function () {
     console.log("Drift: content.js - Event: Video PAUSED!");
-    // Clear any existing timer just in case
     if (videoPauseTimer) {
       clearTimeout(videoPauseTimer);
     }
-    // Start a new timer
-    videoPauseTimer = setTimeout(function () {
-      console.log(
-        "Drift: content.js - Video pause timeout reached. Sending message to background."
-      );
-      chrome.runtime.sendMessage(
-        {
-          action: "videoPausedTooLong",
-          videoUrl: window.location.href, // Send current video URL
-        },
-        function (response) {
-          if (chrome.runtime.lastError) {
-            console.warn(
-              "Drift: content.js - Error sending videoPausedTooLong message:",
-              chrome.runtime.lastError.message
-            );
-          } else {
-            // console.log("Drift: content.js - Message sent, response from background:", response);
+
+    // ---> MODIFIED PART: Fetch custom duration from storage <---
+    chrome.storage.local.get(["totalVideoPauseSeconds"], function (result) {
+      let pauseTimeoutSeconds = result.totalVideoPauseSeconds;
+
+      if (
+        typeof pauseTimeoutSeconds !== "number" ||
+        isNaN(pauseTimeoutSeconds) ||
+        pauseTimeoutSeconds < 1
+      ) {
+        // Use a default if not set, not a number, or less than 1 second
+        pauseTimeoutSeconds = DEFAULT_VIDEO_PAUSE_SECONDS_CONTENT_SCRIPT;
+        console.log(
+          `Drift: content.js - Using default video pause timeout: ${pauseTimeoutSeconds}s`
+        );
+      } else {
+        console.log(
+          `Drift: content.js - Using stored video pause timeout: ${pauseTimeoutSeconds}s`
+        );
+      }
+
+      const videoPauseTimeoutMs = pauseTimeoutSeconds * 1000; // Convert to milliseconds
+
+      videoPauseTimer = setTimeout(function () {
+        console.log(
+          "Drift: content.js - Video pause timeout reached. Sending message to background."
+        );
+        chrome.runtime.sendMessage(
+          {
+            action: "videoPausedTooLong",
+            videoUrl: window.location.href,
+          },
+          function (response) {
+            if (chrome.runtime.lastError) {
+              console.warn(
+                "Drift: content.js - Error sending videoPausedTooLong message:",
+                chrome.runtime.lastError.message
+              );
+            }
           }
-        }
-      );
-    }, VIDEO_PAUSE_TIMEOUT_MS);
+        );
+      }, videoPauseTimeoutMs); // Use the fetched or default duration in MS
+    });
+    // ---> END OF MODIFIED PART <---
   });
 
   videoElement.addEventListener("play", function () {
     console.log("Drift: content.js - Event: Video PLAYING/RESUMED!");
     if (videoPauseTimer) {
       clearTimeout(videoPauseTimer);
-      console.log("Drift: content.js - Video pause timer cleared."); // Good to keep this log for now
+      console.log("Drift: content.js - Video pause timer cleared.");
     }
-    // ---> ADDED THIS BLOCK TO SEND A MESSAGE WHEN VIDEO PLAYS <---
     chrome.runtime.sendMessage(
       {
-        action: "videoPlayed", // New action type
+        action: "videoPlayed",
         videoUrl: window.location.href,
       },
       function (response) {
@@ -77,53 +96,41 @@ function attachToVideo(videoElement) {
             "Drift: content.js - Error sending videoPlayed message:",
             chrome.runtime.lastError.message
           );
-        } else {
-          // console.log("Drift: content.js - videoPlayed message sent, response:", response);
         }
       }
     );
-    // ---> END OF ADDED BLOCK <---
   });
 
   videoElement.dataset.driftListenersAttached = "true";
   console.log("Drift: content.js - Listeners attached and marker set.");
 }
 
+// ... (MutationObserver and initial video finding logic remain the same) ...
 const observer = new MutationObserver(function (
   mutationsList,
   observerInstance
 ) {
   const video = findVideoElement();
   if (video && video.dataset.driftListenersAttached !== "true") {
-    // console.log("Drift: content.js - MutationObserver found video, attempting to attach listeners.");
     attachToVideo(video);
   }
 });
-
-// console.log("Drift: content.js - Setting up MutationObserver.");
 observer.observe(document.body, { childList: true, subtree: true });
 
 const initialVideo = findVideoElement();
 if (initialVideo) {
-  // console.log("Drift: content.js - Video element found on initial script load, attempting to attach listeners.");
   attachToVideo(initialVideo);
-} else {
-  // console.log("Drift: content.js - Main video element not found on initial script load. Observer is active.");
 }
+
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-  // console.log("Drift: content.js - Message received:", request); // For debugging if needed
   if (request.action === "cancelVideoPauseTimer") {
     if (videoPauseTimer) {
       clearTimeout(videoPauseTimer);
-      videoPauseTimer = null; // Reset the timer ID
+      videoPauseTimer = null;
       console.log(
         "Drift: content.js - Video pause timer cancelled by background (due to tab switch/deactivation)."
       );
-      // sendResponse({status: "video pause timer cancelled"}); // Optional: if background needs confirmation
     }
   }
-  // If you use sendResponse, you might need to return true for asynchronous responses,
-  // but for this simple cancel action, it's likely not strictly needed unless background waits.
-  // For now, we'll assume background doesn't wait for a response here.
+  return false; // Not sending an async response from this listener
 });
-// ---> END OF NEW MESSAGE LISTENER <---

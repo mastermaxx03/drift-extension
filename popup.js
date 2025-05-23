@@ -15,14 +15,25 @@ document.addEventListener("DOMContentLoaded", function () {
     "videoPauseSecondsInput"
   );
 
+  // Sound selection inputs - NEW
+  const tabDriftSoundSelect = document.getElementById("tabDriftSoundSelect");
+  const videoPauseSoundSelect = document.getElementById(
+    "videoPauseSoundSelect"
+  );
+
   const saveSettingsButton = document.getElementById("saveSettingsButton");
   const settingsStatusMessage = document.getElementById(
     "settingsStatusMessage"
   );
 
+  // Default values for timers
   const DEFAULT_DRIFT_TOTAL_SECONDS = 15;
   const DEFAULT_VIDEO_PAUSE_TOTAL_SECONDS = 10;
-  const MINIMUM_TOTAL_SECONDS = 5; // Applies to both timers
+  const MINIMUM_TOTAL_SECONDS = 5; // Minimum allowed drift/pause time in seconds
+
+  // Default values for sound choices (should match <option value="..."> in popup.html and keys in SOUND_OPTIONS in background.js)
+  const DEFAULT_TAB_DRIFT_SOUND_KEY = "nudge1";
+  const DEFAULT_VIDEO_PAUSE_SOUND_KEY = "quietNudge4";
 
   // Load saved settings when popup opens
   chrome.storage.local.get(
@@ -31,6 +42,8 @@ document.addEventListener("DOMContentLoaded", function () {
       "focusTabUrl",
       "totalDriftSeconds",
       "totalVideoPauseSeconds",
+      "tabDriftSoundChoice", // Storage key for tab drift sound
+      "videoPauseSoundChoice", // Storage key for video pause sound
     ],
     function (result) {
       // Focus tab status
@@ -66,6 +79,12 @@ document.addEventListener("DOMContentLoaded", function () {
         currentVideoPauseTotalSeconds / 60
       );
       videoPauseSecondsInput.value = currentVideoPauseTotalSeconds % 60;
+
+      // Populate Sound Selectors
+      tabDriftSoundSelect.value =
+        result.tabDriftSoundChoice || DEFAULT_TAB_DRIFT_SOUND_KEY;
+      videoPauseSoundSelect.value =
+        result.videoPauseSoundChoice || DEFAULT_VIDEO_PAUSE_SOUND_KEY;
     }
   );
 
@@ -129,6 +148,9 @@ document.addEventListener("DOMContentLoaded", function () {
     const videoMins = parseInt(videoPauseMinutesInput.value, 10);
     const videoSecs = parseInt(videoPauseSecondsInput.value, 10);
 
+    const selectedTabDriftSound = tabDriftSoundSelect.value;
+    const selectedVideoPauseSound = videoPauseSoundSelect.value;
+
     // Validate Drift Timer
     if (
       isNaN(driftMins) ||
@@ -138,7 +160,7 @@ document.addEventListener("DOMContentLoaded", function () {
       driftSecs > 59
     ) {
       settingsStatusMessage.textContent =
-        "Please enter valid numbers for Drift Timer (mins >= 0, secs 0-59).";
+        "Please enter valid numbers for Drift Timer.";
       settingsStatusMessage.style.color = "red";
       return;
     }
@@ -158,7 +180,7 @@ document.addEventListener("DOMContentLoaded", function () {
       videoSecs > 59
     ) {
       settingsStatusMessage.textContent =
-        "Please enter valid numbers for Video Pause Timer (mins >= 0, secs 0-59).";
+        "Please enter valid numbers for Video Pause Timer.";
       settingsStatusMessage.style.color = "red";
       return;
     }
@@ -169,11 +191,13 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    // Save both settings
+    // Save all settings
     chrome.storage.local.set(
       {
         totalDriftSeconds: totalDriftSeconds,
         totalVideoPauseSeconds: totalVideoPauseSeconds,
+        tabDriftSoundChoice: selectedTabDriftSound,
+        videoPauseSoundChoice: selectedVideoPauseSound,
       },
       function () {
         if (chrome.runtime.lastError) {
@@ -182,7 +206,7 @@ document.addEventListener("DOMContentLoaded", function () {
           settingsStatusMessage.style.color = "red";
         } else {
           console.log(
-            `Settings saved: Drift ${totalDriftSeconds}s, Video Pause ${totalVideoPauseSeconds}s.`
+            `Settings saved: Drift ${totalDriftSeconds}s (Sound: ${selectedTabDriftSound}), Video Pause ${totalVideoPauseSeconds}s (Sound: ${selectedVideoPauseSound}).`
           );
           settingsStatusMessage.textContent = "Settings saved!";
           settingsStatusMessage.style.color = "green";

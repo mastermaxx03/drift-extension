@@ -19,9 +19,7 @@
     <h1>Drift - Focus Recovery</h1>
     <button id="activateButton">Activate Drift on this Site</button>
     <p id="statusMessage"></p>
-
     <hr />
-
     <div>
       <label>Remind if tab switched for:</label><br />
       <input
@@ -40,9 +38,17 @@
         value="15"
         style="width: 50px"
       />
-      <label for="driftSecondsInput">seconds</label>
+      <label for="driftSecondsInput">seconds</label><br />
+      <label for="tabDriftSoundSelect">Sound:</label>
+      <select id="tabDriftSoundSelect">
+        <option value="none">None</option>
+        <option value="nudge1">Nudge 1</option>
+        <option value="nudge2">Nudge 2</option>
+        <option value="nudge3">Nudge 3</option>
+        <option value="quietNudge4">Quiet Nudge</option>
+        <option value="whistleNudge5">Whistle Nudge</option>
+      </select>
     </div>
-
     <hr />
     <div>
       <label>Remind if video paused for:</label><br />
@@ -62,7 +68,16 @@
         value="10"
         style="width: 50px"
       />
-      <label for="videoPauseSecondsInput">seconds</label>
+      <label for="videoPauseSecondsInput">seconds</label><br />
+      <label for="videoPauseSoundSelect">Sound:</label>
+      <select id="videoPauseSoundSelect">
+        <option value="none">None</option>
+        <option value="nudge1">Nudge 1</option>
+        <option value="nudge2">Nudge 2</option>
+        <option value="nudge3">Nudge 3</option>
+        <option value="quietNudge4">Quiet Nudge</option>
+        <option value="whistleNudge5">Whistle Nudge</option>
+      </select>
     </div>
 
     <button id="saveSettingsButton">Save Settings</button>

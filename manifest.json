@@ -3,7 +3,14 @@
   "name": "Drift - Focus Recovery",
   "version": "0.1.0",
   "description": "Helps you stay mindful of your time and attention online by nudging you back to your focus task.",
-  "permissions": ["storage", "notifications", "tabs", "alarms", "idle"],
+  "permissions": [
+    "storage",
+    "notifications",
+    "tabs",
+    "alarms",
+    "idle",
+    "offscreen"
+  ],
   "host_permissions": ["https://*.youtube.com/*"],
   "background": {
     "service_worker": "background.js"

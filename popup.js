@@ -20,6 +20,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const videoPauseSoundSelect = document.getElementById(
     "videoPauseSoundSelect"
   );
+  const idleMinutesInput = document.getElementById("idleMinutesInput");
+  const idleSecondsInput = document.getElementById("idleSecondsInput");
+  const idleNudgeSoundSelect = document.getElementById("idleNudgeSoundSelect");
 
   const saveSettingsButton = document.getElementById("saveSettingsButton");
   const settingsStatusMessage = document.getElementById(
@@ -34,6 +37,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // Default values for sound choices (should match <option value="..."> in popup.html and keys in SOUND_OPTIONS in background.js)
   const DEFAULT_TAB_DRIFT_SOUND_KEY = "nudge1";
   const DEFAULT_VIDEO_PAUSE_SOUND_KEY = "quietNudge4";
+  const DEFAULT_IDLE_TOTAL_SECONDS = 60; // Default 1 minute for idle nudge delay
+  const DEFAULT_IDLE_NUDGE_SOUND_KEY = "nudge2"; // Or your preferred default for idle
+  // Adjust MINIMUM_TOTAL_SECONDS if needed, or add a specific MINIMUM_IDLE_SECONDS (e.g., 15s)
+  const MINIMUM_IDLE_SECONDS = 15; // Min additional delay after Chrome's idle detection (must be >= 1 for alarms if using delayInMinutes > 0)
 
   // Load saved settings when popup opens
   chrome.storage.local.get(
@@ -44,6 +51,8 @@ document.addEventListener("DOMContentLoaded", function () {
       "totalVideoPauseSeconds",
       "tabDriftSoundChoice", // Storage key for tab drift sound
       "videoPauseSoundChoice", // Storage key for video pause sound
+      "totalIdleSeconds",
+      "idleNudgeSoundChoice",
     ],
     function (result) {
       // Focus tab status
@@ -85,6 +94,19 @@ document.addEventListener("DOMContentLoaded", function () {
         result.tabDriftSoundChoice || DEFAULT_TAB_DRIFT_SOUND_KEY;
       videoPauseSoundSelect.value =
         result.videoPauseSoundChoice || DEFAULT_VIDEO_PAUSE_SOUND_KEY;
+      let currentIdleTotalSeconds = result.totalIdleSeconds;
+      if (
+        typeof currentIdleTotalSeconds !== "number" ||
+        isNaN(currentIdleTotalSeconds)
+      ) {
+        currentIdleTotalSeconds = DEFAULT_IDLE_TOTAL_SECONDS;
+      }
+      idleMinutesInput.value = Math.floor(currentIdleTotalSeconds / 60);
+      idleSecondsInput.value = currentIdleTotalSeconds % 60;
+
+      // Populate Idle Nudge Sound Selector
+      idleNudgeSoundSelect.value =
+        result.idleNudgeSoundChoice || DEFAULT_IDLE_NUDGE_SOUND_KEY;
     }
   );
 
@@ -151,6 +173,10 @@ document.addEventListener("DOMContentLoaded", function () {
     const selectedTabDriftSound = tabDriftSoundSelect.value;
     const selectedVideoPauseSound = videoPauseSoundSelect.value;
 
+    const idleMins = parseInt(idleMinutesInput.value, 10);
+    const idleSecs = parseInt(idleSecondsInput.value, 10);
+    const selectedIdleNudgeSound = idleNudgeSoundSelect.value;
+
     // Validate Drift Timer
     if (
       isNaN(driftMins) ||
@@ -190,6 +216,24 @@ document.addEventListener("DOMContentLoaded", function () {
       settingsStatusMessage.style.color = "red";
       return;
     }
+    if (
+      isNaN(idleMins) ||
+      idleMins < 0 ||
+      isNaN(idleSecs) ||
+      idleSecs < 0 ||
+      idleSecs > 59
+    ) {
+      settingsStatusMessage.textContent =
+        "Please enter valid numbers for Idle Timer.";
+      settingsStatusMessage.style.color = "red";
+      return;
+    }
+    const totalIdleSeconds = idleMins * 60 + idleSecs;
+    if (totalIdleSeconds < MINIMUM_IDLE_SECONDS) {
+      settingsStatusMessage.textContent = `Minimum Idle Timer is ${MINIMUM_IDLE_SECONDS} seconds.`;
+      settingsStatusMessage.style.color = "red";
+      return;
+    }
 
     // Save all settings
     chrome.storage.local.set(
@@ -198,6 +242,8 @@ document.addEventListener("DOMContentLoaded", function () {
         totalVideoPauseSeconds: totalVideoPauseSeconds,
         tabDriftSoundChoice: selectedTabDriftSound,
         videoPauseSoundChoice: selectedVideoPauseSound,
+        totalIdleSeconds: totalIdleSeconds,
+        idleNudgeSoundChoice: selectedIdleNudgeSound,
       },
       function () {
         if (chrome.runtime.lastError) {
@@ -206,7 +252,7 @@ document.addEventListener("DOMContentLoaded", function () {
           settingsStatusMessage.style.color = "red";
         } else {
           console.log(
-            `Settings saved: Drift ${totalDriftSeconds}s (Sound: ${selectedTabDriftSound}), Video Pause ${totalVideoPauseSeconds}s (Sound: ${selectedVideoPauseSound}).`
+            `Settings saved: Drift ${totalDriftSeconds}s (Sound: ${selectedTabDriftSound}), Video Pause ${totalVideoPauseSeconds}s (Sound: ${selectedVideoPauseSound}) Idle ${totalIdleSeconds}s (Sound: ${selectedIdleNudgeSound}).`
           );
           settingsStatusMessage.textContent = "Settings saved!";
           settingsStatusMessage.style.color = "green";

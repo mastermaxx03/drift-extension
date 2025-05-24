@@ -6,8 +6,11 @@ let focusTabUrl = null;
 const DRIFT_ALARM_NAME = "driftAlarm";
 const NOTIFICATION_ID = "driftNotification"; // For tab drift
 const VIDEO_PAUSE_NOTIFICATION_ID = "videoPauseNotification"; // For video pause
+const IDLE_ALARM_NAME = "idleReturnAlarm";
+const IDLE_RETURN_NOTIFICATION_ID = "idleReturnNotification"; // <<< DEFINED CONSTANT
+const IDLE_STATE_DETECTION_INTERVAL_SECONDS = 60;
 
-const TEST_DELAY_MILLISECONDS = 10000; // Default test delay for tab drift if no user setting
+const TEST_DELAY_MILLISECONDS = 10000;
 
 // --- SOUND CONFIGURATION ---
 const SOUND_OPTIONS = {
@@ -20,6 +23,7 @@ const SOUND_OPTIONS = {
 };
 const DEFAULT_TAB_DRIFT_SOUND_KEY = "nudge1";
 const DEFAULT_VIDEO_PAUSE_SOUND_KEY = "quietNudge4";
+const DEFAULT_IDLE_NUDGE_SOUND_KEY = "nudge2";
 // --- END OF SOUND CONFIGURATION ---
 
 // --- OFFSCREEN DOCUMENT CONFIGURATION ---
@@ -31,10 +35,22 @@ console.log(
   TEST_DELAY_MILLISECONDS / 1000,
   "seconds"
 );
+console.log(
+  `Drift: Idle detection interval will be set to ${IDLE_STATE_DETECTION_INTERVAL_SECONDS} seconds.`
+);
+
+// --- Initialize Idle Detection Interval ---
+try {
+  chrome.idle.setDetectionInterval(IDLE_STATE_DETECTION_INTERVAL_SECONDS);
+  console.log(
+    `Drift: Idle detection interval successfully set to ${IDLE_STATE_DETECTION_INTERVAL_SECONDS} seconds.`
+  );
+} catch (e) {
+  console.error("Drift: Error setting idle detection interval:", e);
+}
 
 // --- FUNCTIONS FOR OFFSCREEN DOCUMENT AUDIO PLAYBACK ---
 async function hasOffscreenDocument() {
-  // @ts-ignore Property 'getContexts' exists on 'runtime'.
   if (chrome.runtime.getContexts) {
     const contexts = await chrome.runtime.getContexts({
       contextTypes: ["OFFSCREEN_DOCUMENT"],
@@ -52,11 +68,9 @@ async function hasOffscreenDocument() {
 
 async function setupOffscreenDocument() {
   if (creatingOffscreenDocument) {
-    console.log("Drift Offscreen: Document creation already in progress.");
     return;
   }
   if (await hasOffscreenDocument()) {
-    console.log("Drift Offscreen: Document already exists.");
     return;
   }
   creatingOffscreenDocument = true;
@@ -118,6 +132,9 @@ function playSoundForNudge(nudgeType) {
   } else if (nudgeType === "videoPause") {
     soundSettingStorageKey = "videoPauseSoundChoice";
     defaultSoundKey = DEFAULT_VIDEO_PAUSE_SOUND_KEY;
+  } else if (nudgeType === "idleNudge") {
+    soundSettingStorageKey = "idleNudgeSoundChoice";
+    defaultSoundKey = DEFAULT_IDLE_NUDGE_SOUND_KEY;
   } else {
     console.warn("Drift: Unknown nudge type for sound:", nudgeType);
     return;
@@ -150,6 +167,10 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       if (wasCleared)
         console.log("Cleared existing drift alarm on new activation.");
     });
+    chrome.alarms.clear(IDLE_ALARM_NAME, (wasCleared) => {
+      if (wasCleared)
+        console.log("Cleared existing idle alarm on new activation.");
+    });
     sendResponse({ status: "Monitoring started for tab " + focusTabId });
     return true;
   } else if (request.action === "videoPausedTooLong") {
@@ -159,7 +180,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     );
     if (focusTabId && sender.tab && sender.tab.id === focusTabId) {
       playSoundForNudge("videoPause");
-
       const notificationOptions = {
         type: "basic",
         iconUrl: "icons/icon128.png",
@@ -171,15 +191,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         } is paused.`,
         priority: 1,
       };
-      console.log(
-        "Drift: About to create video pause notification with ID:",
-        VIDEO_PAUSE_NOTIFICATION_ID
-      );
-      console.log(
-        "Drift: Notification options:",
-        JSON.stringify(notificationOptions)
-      );
-
+      // console.log("Drift: About to create video pause notification with ID:", VIDEO_PAUSE_NOTIFICATION_ID);
+      // console.log("Drift: Notification options:", JSON.stringify(notificationOptions));
       chrome.notifications.create(
         VIDEO_PAUSE_NOTIFICATION_ID,
         notificationOptions,
@@ -207,43 +220,92 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     chrome.notifications.clear(
       VIDEO_PAUSE_NOTIFICATION_ID,
       function (wasCleared) {
-        if (wasCleared) {
+        if (wasCleared)
           console.log(
             "Background: Video pause notification cleared because video was played."
           );
-        }
       }
     );
-
-    // ---> MODIFIED PART: Attempt to stop sound in offscreen document <---
     (async () => {
       if (await hasOffscreenDocument()) {
-        console.log(
-          "Background: Sending stopSoundOffscreen message to offscreen document."
-        );
         chrome.runtime
           .sendMessage({ action: "stopSoundOffscreen" })
-          .catch((e) => {
-            // This error can happen if the offscreen document closed itself already, or other comms issue
+          .catch((e) =>
             console.warn(
               "Background: Error sending stopSoundOffscreen message:",
               e.message
-            );
-          });
-      } else {
-        console.log(
-          "Background: No offscreen document found to send stopSoundOffscreen message."
-        );
+            )
+          );
       }
     })();
-    // ---> END OF MODIFIED PART <---
-
     sendResponse({
       status: "Video pause notification clear and sound stop attempt.",
     });
     return true;
   }
   return false;
+});
+
+// --- IDLE STATE CHANGE LISTENER ---
+chrome.idle.onStateChanged.addListener(function (newState) {
+  console.log(`Drift: Idle state changed to: ${newState}`);
+
+  if (focusTabId === null) {
+    chrome.alarms.clear(IDLE_ALARM_NAME);
+    chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID); // <<< ADDED
+    return;
+  }
+
+  if (newState === "active") {
+    console.log(
+      "Drift: User became active. Clearing idle alarm and notification."
+    );
+    chrome.alarms.clear(IDLE_ALARM_NAME);
+    chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID); // <<< ADDED
+  } else if (newState === "idle" || newState === "locked") {
+    chrome.tabs.get(focusTabId, function (tab) {
+      if (chrome.runtime.lastError) {
+        console.warn(
+          "Drift: Could not get focus tab details for idle check:",
+          chrome.runtime.lastError.message
+        );
+      }
+      if (tab && tab.audible) {
+        console.log(
+          "Drift: User is idle/locked, but focus tab is playing audio. Idle nudge suppressed."
+        );
+        chrome.alarms.clear(IDLE_ALARM_NAME);
+        chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID); // Clear if it was somehow shown before audio started
+        return;
+      }
+      console.log(
+        `Drift: User is ${newState} and focus tab is not audible (or tab info unavailable).`
+      );
+      chrome.storage.local.get(["totalIdleSeconds"], function (result) {
+        let actualIdleSeconds = result.totalIdleSeconds;
+        const defaultSystemIdleNudgeSeconds = 60;
+        if (
+          typeof actualIdleSeconds !== "number" ||
+          isNaN(actualIdleSeconds) ||
+          actualIdleSeconds < 15
+        ) {
+          actualIdleSeconds = defaultSystemIdleNudgeSeconds;
+          console.log(
+            `Drift: Using default idle nudge delay of ${actualIdleSeconds}s.`
+          );
+        }
+        const delayInMinutes = actualIdleSeconds / 60.0;
+        console.log(
+          `Drift: Setting idle return alarm for ${delayInMinutes.toFixed(
+            2
+          )} minute(s).`
+        );
+        chrome.alarms.create(IDLE_ALARM_NAME, {
+          delayInMinutes: delayInMinutes,
+        });
+      });
+    });
+  }
 });
 
 // --- TAB ACTIVATED LISTENER ---
@@ -257,6 +319,10 @@ chrome.tabs.onActivated.addListener(function (activeInfo) {
       if (wasCleared)
         console.log("Drift alarm cleared (returned to focus tab).");
     });
+    chrome.alarms.clear(IDLE_ALARM_NAME, function (wasCleared) {
+      if (wasCleared)
+        console.log("Drift: Idle alarm cleared (returned to focus tab).");
+    });
     chrome.notifications.clear(NOTIFICATION_ID, function (wasCleared) {
       if (wasCleared)
         console.log("Drift notification cleared (returned to focus tab).");
@@ -267,6 +333,16 @@ chrome.tabs.onActivated.addListener(function (activeInfo) {
         if (wasCleared)
           console.log(
             "Background: Video pause notification cleared as user returned to focus tab."
+          );
+      }
+    );
+    chrome.notifications.clear(
+      IDLE_RETURN_NOTIFICATION_ID,
+      function (wasCleared) {
+        // <<< ADDED
+        if (wasCleared)
+          console.log(
+            "Background: Idle notification cleared as user returned to focus tab."
           );
       }
     );
@@ -293,18 +369,9 @@ chrome.tabs.onActivated.addListener(function (activeInfo) {
         when: Date.now() + delayInMilliseconds,
       });
     });
-
     if (focusTabId !== null) {
       chrome.tabs
-        .sendMessage(
-          focusTabId,
-          { action: "cancelVideoPauseTimer" },
-          function (response) {
-            if (chrome.runtime.lastError) {
-              // console.warn("Drift: background.js - Could not send cancelVideoPauseTimer: ", chrome.runtime.lastError.message);
-            }
-          }
-        )
+        .sendMessage(focusTabId, { action: "cancelVideoPauseTimer" })
         .catch((e) => {
           /*ignore if tab doesn't exist or no listener*/
         });
@@ -319,7 +386,6 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
     console.log("Tab Drift alarm triggered!");
     if (focusTabUrl) {
       playSoundForNudge("tabDrift");
-
       const notificationOptions = {
         type: "basic",
         iconUrl: "icons/icon128.png",
@@ -327,15 +393,8 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
         message: `Time to return to: ${focusTabUrl.substring(0, 100)}`,
         priority: 2,
       };
-      console.log(
-        "Drift: About to create tab drift notification with ID:",
-        NOTIFICATION_ID
-      );
-      console.log(
-        "Drift: Notification options:",
-        JSON.stringify(notificationOptions)
-      );
-
+      // console.log("Drift: About to create tab drift notification with ID:", NOTIFICATION_ID);
+      // console.log("Drift: Notification options:", JSON.stringify(notificationOptions));
       chrome.notifications.create(
         NOTIFICATION_ID,
         notificationOptions,
@@ -353,6 +412,42 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
     } else {
       console.log("FocusTabUrl not set, not showing tab drift notification.");
     }
+  } else if (alarm.name === IDLE_ALARM_NAME) {
+    console.log("Drift: Idle/Return alarm triggered!");
+    if (focusTabUrl) {
+      playSoundForNudge("idleNudge");
+      const notificationOptions = {
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: "Still There?",
+        message: `It seems you've been away. Ready to get back to: ${focusTabUrl.substring(
+          0,
+          100
+        )}?`,
+        priority: 2,
+      };
+      // console.log("Drift: About to create idle return notification with ID:", IDLE_RETURN_NOTIFICATION_ID);
+      // console.log("Drift: Notification options:", JSON.stringify(notificationOptions));
+      chrome.notifications.create(
+        IDLE_RETURN_NOTIFICATION_ID,
+        notificationOptions,
+        function (id) {
+          // <<< USE THE CONSTANT
+          if (chrome.runtime.lastError) {
+            console.error(
+              "Drift: Idle Notification error:",
+              chrome.runtime.lastError.message
+            );
+          } else {
+            console.log("Drift: Idle return notification shown:", id);
+          }
+        }
+      );
+    } else {
+      console.log(
+        "Drift: Idle alarm fired, but no focus URL. Not showing notification."
+      );
+    }
   }
 });
 
@@ -363,8 +458,10 @@ chrome.tabs.onRemoved.addListener(function (tabId, removeInfo) {
     focusTabId = null;
     focusTabUrl = null;
     chrome.alarms.clear(DRIFT_ALARM_NAME);
+    chrome.alarms.clear(IDLE_ALARM_NAME);
     chrome.notifications.clear(NOTIFICATION_ID);
     chrome.notifications.clear(VIDEO_PAUSE_NOTIFICATION_ID);
+    chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID); // <<< ADDED
     chrome.storage.local.remove(["focusTabId", "focusTabUrl"], () => {
       if (chrome.runtime.lastError)
         console.error(

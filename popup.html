@@ -79,6 +79,35 @@
         <option value="whistleNudge5">Whistle Nudge</option>
       </select>
     </div>
+    <div>
+      <label>Remind if idle/away from Chrome for:</label><br />
+      <input
+        type="number"
+        id="idleMinutesInput"
+        min="0"
+        value="1"
+        style="width: 50px"
+      />
+      <label for="idleMinutesInput">minutes</label>
+      <input
+        type="number"
+        id="idleSecondsInput"
+        min="0"
+        max="59"
+        value="0"
+        style="width: 50px"
+      />
+      <label for="idleSecondsInput">seconds</label><br />
+      <label for="idleNudgeSoundSelect">Sound:</label>
+      <select id="idleNudgeSoundSelect">
+        <option value="none">None</option>
+        <option value="nudge1">Nudge 1</option>
+        <option value="nudge2">Nudge 2</option>
+        <option value="nudge3">Nudge 3</option>
+        <option value="quietNudge4">Quiet Nudge</option>
+        <option value="whistleNudge5">Whistle Nudge</option>
+      </select>
+    </div>
 
     <button id="saveSettingsButton">Save Settings</button>
     <p id="settingsStatusMessage"></p>

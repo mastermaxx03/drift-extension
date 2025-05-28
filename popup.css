@@ -1,0 +1,145 @@
+body {
+  font-family: Arial, sans-serif;
+  width: 280px; /* Slightly wider for better spacing */
+  padding: 15px;
+  background-color: #f9f9f9; /* Light, calm background */
+  color: #333;
+  font-size: 14px;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px; /* Space between major sections */
+}
+
+h1 {
+  font-size: 18px;
+  margin-top: 0;
+  margin-bottom: 5px; /* Reduced margin */
+  color: #2c3e50; /* Darker, calm title color */
+  text-align: center;
+}
+
+.main-controls,
+.footer-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+button {
+  background-color: #3498db; /* A calm blue */
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+button:hover {
+  background-color: #2980b9;
+}
+
+/* Specific style for deactivate button if you want it to look different */
+/* You'd toggle this class in popup.js if needed, or style based on data-active attribute */
+/* button[data-active="true"] { background-color: #e74c3c; } */
+/* button[data-active="true"]:hover { background-color: #c0392b; } */
+
+.status-message {
+  font-size: 13px;
+  min-height: 1.2em; /* Prevent layout shifts when text appears/disappears */
+  margin: 5px 0;
+}
+
+#settingsStatusMessage.success {
+  /* Add class 'success' in JS for green text */
+  color: green;
+}
+#settingsStatusMessage.error {
+  /* Add class 'error' in JS for red text */
+  color: red;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  width: 100%;
+}
+
+hr.subtle-hr {
+  /* For between setting groups */
+  border-top: 1px solid #eee;
+  margin: 10px 0;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px; /* Space between individual setting groups */
+  text-align: left;
+}
+
+.settings-group {
+  padding: 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background-color: #fff;
+}
+
+.settings-group h2 {
+  font-size: 14px;
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #555;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between; /* Align label left, input/select right */
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.setting-row label {
+  margin-right: 10px;
+  flex-shrink: 0; /* Prevent label from shrinking */
+}
+
+.time-inputs {
+  display: flex;
+  align-items: center;
+}
+
+.time-inputs input[type="number"] {
+  width: 45px; /* Adjust width */
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  margin-right: 3px;
+  text-align: right;
+}
+.time-inputs .unit-label {
+  margin-right: 8px; /* Space after "min" / "sec" */
+  font-size: 13px;
+  color: #777;
+}
+
+select {
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  min-width: 100px; /* Give select some base width */
+}
+
+/* Remove ugly arrows from number inputs in WebKit browsers */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

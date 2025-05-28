@@ -2,116 +2,127 @@
 <html>
   <head>
     <title>Drift Control</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        width: 250px;
-        padding: 10px;
-        text-align: center;
-      }
-      h1 {
-        font-size: 16px;
-        margin-top: 0;
-      }
-    </style>
+    <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1>Drift - Focus Recovery</h1>
-    <button id="activateButton">Activate Drift on this Site</button>
-    <p id="statusMessage"></p>
-    <hr />
-    <div>
-      <label>Remind if tab switched for:</label><br />
-      <input
-        type="number"
-        id="driftMinutesInput"
-        min="0"
-        value="0"
-        style="width: 50px"
-      />
-      <label for="driftMinutesInput">minutes</label>
-      <input
-        type="number"
-        id="driftSecondsInput"
-        min="0"
-        max="59"
-        value="15"
-        style="width: 50px"
-      />
-      <label for="driftSecondsInput">seconds</label><br />
-      <label for="tabDriftSoundSelect">Sound:</label>
-      <select id="tabDriftSoundSelect">
-        <option value="none">None</option>
-        <option value="nudge1">Nudge 1</option>
-        <option value="nudge2">Nudge 2</option>
-        <option value="nudge3">Nudge 3</option>
-        <option value="quietNudge4">Quiet Nudge</option>
-        <option value="whistleNudge5">Whistle Nudge</option>
-      </select>
-    </div>
-    <hr />
-    <div>
-      <label>Remind if video paused for:</label><br />
-      <input
-        type="number"
-        id="videoPauseMinutesInput"
-        min="0"
-        value="0"
-        style="width: 50px"
-      />
-      <label for="videoPauseMinutesInput">minutes</label>
-      <input
-        type="number"
-        id="videoPauseSecondsInput"
-        min="0"
-        max="59"
-        value="10"
-        style="width: 50px"
-      />
-      <label for="videoPauseSecondsInput">seconds</label><br />
-      <label for="videoPauseSoundSelect">Sound:</label>
-      <select id="videoPauseSoundSelect">
-        <option value="none">None</option>
-        <option value="nudge1">Nudge 1</option>
-        <option value="nudge2">Nudge 2</option>
-        <option value="nudge3">Nudge 3</option>
-        <option value="quietNudge4">Quiet Nudge</option>
-        <option value="whistleNudge5">Whistle Nudge</option>
-      </select>
-    </div>
-    <div>
-      <label>Remind if idle/away from Chrome for:</label><br />
-      <input
-        type="number"
-        id="idleMinutesInput"
-        min="0"
-        value="1"
-        style="width: 50px"
-      />
-      <label for="idleMinutesInput">minutes</label>
-      <input
-        type="number"
-        id="idleSecondsInput"
-        min="0"
-        max="59"
-        value="0"
-        style="width: 50px"
-      />
-      <label for="idleSecondsInput">seconds</label><br />
-      <label for="idleNudgeSoundSelect">Sound:</label>
-      <select id="idleNudgeSoundSelect">
-        <option value="none">None</option>
-        <option value="nudge1">Nudge 1</option>
-        <option value="nudge2">Nudge 2</option>
-        <option value="nudge3">Nudge 3</option>
-        <option value="quietNudge4">Quiet Nudge</option>
-        <option value="whistleNudge5">Whistle Nudge</option>
-      </select>
-    </div>
+    <div class="container">
+      <h1>Drift - Focus Recovery</h1>
 
-    <button id="saveSettingsButton">Save Settings</button>
-    <p id="settingsStatusMessage"></p>
+      <div class="main-controls">
+        <button id="activateButton">Activate Drift on this Site</button>
+        <p id="statusMessage" class="status-message"></p>
+      </div>
 
+      <hr />
+
+      <div class="settings-section">
+        <div class="settings-group">
+          <h2>Tab Drift</h2>
+          <div class="setting-row">
+            <label class="time-label">Remind after:</label>
+            <div class="time-inputs">
+              <input type="number" id="driftMinutesInput" min="0" value="0" />
+              <label for="driftMinutesInput" class="unit-label">min</label>
+              <input
+                type="number"
+                id="driftSecondsInput"
+                min="0"
+                max="59"
+                value="15"
+              />
+              <label for="driftSecondsInput" class="unit-label">sec</label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <label for="tabDriftSoundSelect">Sound:</label>
+            <select id="tabDriftSoundSelect">
+              <option value="none">None</option>
+              <option value="nudge1">Nudge 1</option>
+              <option value="nudge2">Nudge 2</option>
+              <option value="nudge3">Nudge 3</option>
+              <option value="quietNudge4">Quiet Nudge</option>
+              <option value="whistleNudge5">Whistle Nudge</option>
+            </select>
+          </div>
+        </div>
+
+        <hr class="subtle-hr" />
+
+        <div class="settings-group">
+          <h2>Video Pause</h2>
+          <div class="setting-row">
+            <label class="time-label">Remind after:</label>
+            <div class="time-inputs">
+              <input
+                type="number"
+                id="videoPauseMinutesInput"
+                min="0"
+                value="0"
+              />
+              <label for="videoPauseMinutesInput" class="unit-label">min</label>
+              <input
+                type="number"
+                id="videoPauseSecondsInput"
+                min="0"
+                max="59"
+                value="10"
+              />
+              <label for="videoPauseSecondsInput" class="unit-label">sec</label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <label for="videoPauseSoundSelect">Sound:</label>
+            <select id="videoPauseSoundSelect">
+              <option value="none">None</option>
+              <option value="nudge1">Nudge 1</option>
+              <option value="nudge2">Nudge 2</option>
+              <option value="nudge3">Nudge 3</option>
+              <option value="quietNudge4">Quiet Nudge</option>
+              <option value="whistleNudge5">Whistle Nudge</option>
+            </select>
+          </div>
+        </div>
+
+        <hr class="subtle-hr" />
+
+        <div class="settings-group">
+          <h2>Idle / Away from Chrome</h2>
+          <div class="setting-row">
+            <label class="time-label">Remind after:</label>
+            <div class="time-inputs">
+              <input type="number" id="idleMinutesInput" min="0" value="1" />
+              <label for="idleMinutesInput" class="unit-label">min</label>
+              <input
+                type="number"
+                id="idleSecondsInput"
+                min="0"
+                max="59"
+                value="0"
+              />
+              <label for="idleSecondsInput" class="unit-label">sec</label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <label for="idleNudgeSoundSelect">Sound:</label>
+            <select id="idleNudgeSoundSelect">
+              <option value="none">None</option>
+              <option value="nudge1">Nudge 1</option>
+              <option value="nudge2">Nudge 2</option>
+              <option value="nudge3">Nudge 3</option>
+              <option value="quietNudge4">Quiet Nudge</option>
+              <option value="whistleNudge5">Whistle Nudge</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <hr />
+
+      <div class="footer-controls">
+        <button id="saveSettingsButton">Save Settings</button>
+        <p id="settingsStatusMessage" class="status-message"></p>
+      </div>
+    </div>
     <script src="popup.js"></script>
   </body>
 </html>

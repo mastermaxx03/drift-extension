@@ -3,7 +3,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const activateButton = document.getElementById("activateButton");
   const statusMessage = document.getElementById("statusMessage");
 
-  // ... (other element getters: driftMinutesInput, etc. ... sound selectors ...)
   const driftMinutesInput = document.getElementById("driftMinutesInput");
   const driftSecondsInput = document.getElementById("driftSecondsInput");
   const videoPauseMinutesInput = document.getElementById(
@@ -26,7 +25,6 @@ document.addEventListener("DOMContentLoaded", function () {
     "settingsStatusMessage"
   );
 
-  // ... (DEFAULT constants as before) ...
   const DEFAULT_DRIFT_TOTAL_SECONDS = 15;
   const DEFAULT_VIDEO_PAUSE_TOTAL_SECONDS = 10;
   const DEFAULT_IDLE_TOTAL_SECONDS = 60;
@@ -36,8 +34,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const DEFAULT_TAB_DRIFT_SOUND_KEY = "nudge1";
   const DEFAULT_VIDEO_PAUSE_SOUND_KEY = "quietNudge4";
   const DEFAULT_IDLE_NUDGE_SOUND_KEY = "nudge2";
-
-  // No need for currentFocusTabId as a global in popup.js if we always rely on updatePopupUI and its storage check.
 
   function updatePopupUI(isActive, url = "") {
     if (isActive && url) {
@@ -104,14 +100,10 @@ document.addEventListener("DOMContentLoaded", function () {
     );
   }
 
-  // Initial load of settings and UI state
   loadAndApplySettings();
 
-  // ---> ADD THIS LISTENER FOR STORAGE CHANGES <---
   chrome.storage.onChanged.addListener(function (changes, namespace) {
     if (namespace === "local") {
-      // Check if focusTabId or focusTabUrl was changed (especially if cleared)
-      // Or if any setting the popup displays was changed by another source (less likely for this extension)
       let needsUIRefresh = false;
       for (let key in changes) {
         if (
@@ -132,46 +124,51 @@ document.addEventListener("DOMContentLoaded", function () {
         console.log(
           "Drift Popup: Detected storage change, reloading settings and UI."
         );
-        loadAndApplySettings(); // Reload all settings and update UI
+        loadAndApplySettings();
       }
     }
   });
-  // ---> END OF STORAGE CHANGE LISTENER <---
 
   activateButton.addEventListener("click", function () {
     const isActiveNow = activateButton.dataset.active === "true";
     if (isActiveNow) {
       // DEACTIVATE
-      chrome.storage.local.remove(
-        [
-          "focusTabId",
-          "focusTabUrl" /*, 'anyOtherSessionSpecificKeysLikeIsReadingMode'*/,
-        ],
-        function () {
-          if (chrome.runtime.lastError) {
-            /* ... error handling ... */ return;
-          }
-          // updatePopupUI(false); // UI will update via onChanged listener
-          console.log("Drift deactivated by popup. Sending stopMonitoring.");
-          chrome.runtime.sendMessage(
-            { action: "stopMonitoring" },
-            function (response) {
-              /* ... */
-            }
+      chrome.storage.local.remove(["focusTabId", "focusTabUrl"], function () {
+        if (chrome.runtime.lastError) {
+          console.error(
+            "Error clearing focus tab storage:",
+            chrome.runtime.lastError
           );
+          statusMessage.textContent = "Error deactivating Drift."; // Show error
+          return;
         }
-      );
+        console.log("Drift deactivated by popup. Sending stopMonitoring.");
+        chrome.runtime.sendMessage(
+          { action: "stopMonitoring" },
+          function (response) {
+            if (chrome.runtime.lastError) {
+              console.error(
+                "Error sending stopMonitoring message:",
+                chrome.runtime.lastError.message
+              );
+            } else if (response) {
+              console.log(
+                "Background response to stopMonitoring:",
+                response.status
+              );
+            }
+          }
+        );
+        // UI update will be handled by storage.onChanged listener -> loadAndApplySettings()
+      });
     } else {
       // ACTIVATE
-      // ... (existing activation logic from Step 20, Part 1 is good)
-      // Ensure it calls updatePopupUI(true, tabUrl) on successful activation.
-      // For brevity, not re-pasting the full activation block here, it remains the same.
-      // Just make sure that if it sets storage, the onChanged listener will pick it up,
-      // or call updatePopupUI directly after successful storage.set as well.
-      // The original logic did this, which is fine.
       chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
         if (tabs.length === 0 || !tabs[0].id) {
-          /* ... */ return;
+          console.error("No active tab found or tab has no ID.");
+          statusMessage.textContent =
+            "Error: Could not get current tab details.";
+          return;
         }
         const currentTabToFocus = tabs[0];
         const tabId = currentTabToFocus.id;
@@ -185,11 +182,13 @@ document.addEventListener("DOMContentLoaded", function () {
         ) {
           statusMessage.textContent =
             "Cannot activate Drift on special browser pages.";
-          statusMessage.style.color = "red";
+          settingsStatusMessage.classList.remove("success"); // Use settingsStatusMessage for this error
+          settingsStatusMessage.classList.add("error");
           setTimeout(() => {
-            loadAndApplySettings();
-            statusMessage.style.color = "";
-          }, 3000); // Revert to actual state
+            settingsStatusMessage.textContent = "";
+            settingsStatusMessage.classList.remove("error");
+            loadAndApplySettings(); // Reload to show correct inactive state
+          }, 3000);
           return;
         }
 
@@ -197,14 +196,29 @@ document.addEventListener("DOMContentLoaded", function () {
           { focusTabId: tabId, focusTabUrl: tabUrl },
           function () {
             if (chrome.runtime.lastError) {
-              /* ... */
+              console.error(
+                "Error setting focus tab storage:",
+                chrome.runtime.lastError
+              );
+              statusMessage.textContent = "Error activating Drift.";
             } else {
-              // updatePopupUI(true, tabUrl); // UI will update via onChanged, or call directly for immediate feedback
               console.log(`Drift activated on tab ${tabId} with URL ${tabUrl}`);
+              // UI update handled by storage.onChanged or direct call below for immediate feedback
+              updatePopupUI(true, tabUrl);
               chrome.runtime.sendMessage(
                 { action: "startMonitoring", tabId: tabId, tabUrl: tabUrl },
                 function (response) {
-                  /* ... */
+                  if (chrome.runtime.lastError) {
+                    console.error(
+                      "Error sending startMonitoring message:",
+                      chrome.runtime.lastError.message
+                    );
+                  } else if (response) {
+                    console.log(
+                      "Message response from background:",
+                      response.status
+                    );
+                  }
                 }
               );
             }
@@ -215,45 +229,105 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   saveSettingsButton.addEventListener("click", function () {
-    // ... (Existing save settings logic from Step 20, Part 1 is good)
-    // This will also trigger the onChanged listener if the popup is still open,
-    // which will re-run loadAndApplySettings - this is fine.
-    // For brevity, not re-pasting the full save logic here.
-    const driftMins = parseInt(driftMinutesInput.value, 10); /* ... */
-    const driftSecs = parseInt(driftSecondsInput.value, 10); /* ... */
-    const videoMins = parseInt(videoPauseMinutesInput.value, 10); /* ... */
-    const videoSecs = parseInt(videoPauseSecondsInput.value, 10); /* ... */
-    const idleMins = parseInt(idleMinutesInput.value, 10); /* ... */
-    const idleSecs = parseInt(idleSecondsInput.value, 10); /* ... */
-    const selectedTabDriftSound = tabDriftSoundSelect.value; /* ... */
-    const selectedVideoPauseSound = videoPauseSoundSelect.value; /* ... */
-    const selectedIdleNudgeSound = idleNudgeSoundSelect.value; /* ... */
+    settingsStatusMessage.textContent = ""; // Clear previous message
+    settingsStatusMessage.classList.remove("success", "error"); // Clear previous classes
 
-    // Validations...
+    const driftMins = parseInt(driftMinutesInput.value, 10);
+    const driftSecs = parseInt(driftSecondsInput.value, 10);
+    const videoMins = parseInt(videoPauseMinutesInput.value, 10);
+    const videoSecs = parseInt(videoPauseSecondsInput.value, 10);
+    const idleMins = parseInt(idleMinutesInput.value, 10);
+    const idleSecs = parseInt(idleSecondsInput.value, 10);
+
+    const selectedTabDriftSound = tabDriftSoundSelect.value;
+    const selectedVideoPauseSound = videoPauseSoundSelect.value;
+    const selectedIdleNudgeSound = idleNudgeSoundSelect.value;
+
+    // Validate Drift Timer
+    if (
+      isNaN(driftMins) ||
+      driftMins < 0 ||
+      isNaN(driftSecs) ||
+      driftSecs < 0 ||
+      driftSecs > 59
+    ) {
+      settingsStatusMessage.textContent =
+        "Please enter valid numbers for Drift Timer.";
+      settingsStatusMessage.classList.add("error");
+      return;
+    }
     const totalDriftSeconds = driftMins * 60 + driftSecs;
     if (totalDriftSeconds < MINIMUM_FOCUS_SECONDS) {
-      /* ... error ... */ return;
+      settingsStatusMessage.textContent = `Minimum Drift Timer is ${MINIMUM_FOCUS_SECONDS} seconds.`;
+      settingsStatusMessage.classList.add("error");
+      return;
+    }
+
+    // Validate Video Pause Timer
+    if (
+      isNaN(videoMins) ||
+      videoMins < 0 ||
+      isNaN(videoSecs) ||
+      videoSecs < 0 ||
+      videoSecs > 59
+    ) {
+      settingsStatusMessage.textContent =
+        "Please enter valid numbers for Video Pause Timer.";
+      settingsStatusMessage.classList.add("error");
+      return;
     }
     const totalVideoPauseSeconds = videoMins * 60 + videoSecs;
     if (totalVideoPauseSeconds < MINIMUM_FOCUS_SECONDS) {
-      /* ... error ... */ return;
+      settingsStatusMessage.textContent = `Minimum Video Pause Timer is ${MINIMUM_FOCUS_SECONDS} seconds.`;
+      settingsStatusMessage.classList.add("error");
+      return;
+    }
+
+    // Validate Idle Timer
+    if (
+      isNaN(idleMins) ||
+      idleMins < 0 ||
+      isNaN(idleSecs) ||
+      idleSecs < 0 ||
+      idleSecs > 59
+    ) {
+      settingsStatusMessage.textContent =
+        "Please enter valid numbers for Idle Timer.";
+      settingsStatusMessage.classList.add("error");
+      return;
     }
     const totalIdleSeconds = idleMins * 60 + idleSecs;
     if (totalIdleSeconds < MINIMUM_IDLE_SECONDS) {
-      /* ... error ... */ return;
+      settingsStatusMessage.textContent = `Minimum Idle Timer is ${MINIMUM_IDLE_SECONDS} seconds.`;
+      settingsStatusMessage.classList.add("error");
+      return;
     }
 
     chrome.storage.local.set(
       {
-        totalDriftSeconds,
-        totalVideoPauseSeconds,
-        totalIdleSeconds,
+        totalDriftSeconds: totalDriftSeconds,
+        totalVideoPauseSeconds: totalVideoPauseSeconds,
+        totalIdleSeconds: totalIdleSeconds,
         tabDriftSoundChoice: selectedTabDriftSound,
         videoPauseSoundChoice: selectedVideoPauseSound,
         idleNudgeSoundChoice: selectedIdleNudgeSound,
       },
       function () {
-        /* ... success/error message ... */
+        if (chrome.runtime.lastError) {
+          console.error("Error saving settings:", chrome.runtime.lastError);
+          settingsStatusMessage.textContent = "Error saving settings.";
+          settingsStatusMessage.classList.add("error");
+        } else {
+          console.log(
+            `Settings saved: Drift ${totalDriftSeconds}s (Sound: ${selectedTabDriftSound}), Video Pause ${totalVideoPauseSeconds}s (Sound: ${selectedVideoPauseSound}), Idle ${totalIdleSeconds}s (Sound: ${selectedIdleNudgeSound}).`
+          );
+          settingsStatusMessage.textContent = "Settings saved!";
+          settingsStatusMessage.classList.add("success"); // Apply success class
+          setTimeout(() => {
+            settingsStatusMessage.textContent = "";
+            settingsStatusMessage.classList.remove("success", "error"); // Clear classes
+          }, 3000);
+        }
       }
     );
   });

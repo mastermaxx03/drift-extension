@@ -7,7 +7,7 @@ const DRIFT_ALARM_NAME = "driftAlarm";
 const NOTIFICATION_ID = "driftNotification"; // For tab drift
 const VIDEO_PAUSE_NOTIFICATION_ID = "videoPauseNotification"; // For video pause
 const IDLE_ALARM_NAME = "idleReturnAlarm";
-const IDLE_RETURN_NOTIFICATION_ID = "idleReturnNotification"; // <<< DEFINED CONSTANT
+const IDLE_RETURN_NOTIFICATION_ID = "idleReturnNotification";
 const IDLE_STATE_DETECTION_INTERVAL_SECONDS = 60;
 
 const TEST_DELAY_MILLISECONDS = 10000;
@@ -104,9 +104,6 @@ async function playSoundViaOffscreen(soundFilePathKey, nudgeType) {
     return;
   }
   const fullSoundPath = chrome.runtime.getURL(soundFileName);
-  console.log(
-    `Drift: Preparing to play ${fullSoundPath} for ${nudgeType} via offscreen.`
-  );
   await setupOffscreenDocument();
   setTimeout(() => {
     chrome.runtime
@@ -191,8 +188,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         } is paused.`,
         priority: 1,
       };
-      // console.log("Drift: About to create video pause notification with ID:", VIDEO_PAUSE_NOTIFICATION_ID);
-      // console.log("Drift: Notification options:", JSON.stringify(notificationOptions));
       chrome.notifications.create(
         VIDEO_PAUSE_NOTIFICATION_ID,
         notificationOptions,
@@ -242,6 +237,38 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       status: "Video pause notification clear and sound stop attempt.",
     });
     return true;
+  } else if (request.action === "stopMonitoring") {
+    console.log(
+      "Background: Received stopMonitoring. Clearing focus and alarms."
+    );
+    focusTabId = null;
+    focusTabUrl = null;
+    chrome.alarms.clearAll(function (wasCleared) {
+      if (wasCleared)
+        console.log("Drift: All alarms cleared due to stopMonitoring.");
+      else
+        console.log(
+          "Drift: No alarms to clear or failed to clear alarms on stopMonitoring."
+        );
+    });
+    chrome.notifications.clear(NOTIFICATION_ID, function (wasCleared) {
+      if (wasCleared) console.log("Cleared tab drift notification.");
+    });
+    chrome.notifications.clear(
+      VIDEO_PAUSE_NOTIFICATION_ID,
+      function (wasCleared) {
+        if (wasCleared) console.log("Cleared video pause notification.");
+      }
+    );
+    chrome.notifications.clear(
+      IDLE_RETURN_NOTIFICATION_ID,
+      function (wasCleared) {
+        if (wasCleared) console.log("Cleared idle return notification.");
+      }
+    );
+    console.log("Drift: All monitoring stopped.");
+    sendResponse({ status: "Monitoring stopped successfully." });
+    return true;
   }
   return false;
 });
@@ -249,19 +276,64 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 // --- IDLE STATE CHANGE LISTENER ---
 chrome.idle.onStateChanged.addListener(function (newState) {
   console.log(`Drift: Idle state changed to: ${newState}`);
-
   if (focusTabId === null) {
     chrome.alarms.clear(IDLE_ALARM_NAME);
-    chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID); // <<< ADDED
+    chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID);
     return;
   }
-
   if (newState === "active") {
-    console.log(
-      "Drift: User became active. Clearing idle alarm and notification."
-    );
+    console.log("Drift: User became active. Clearing idle alarm.");
     chrome.alarms.clear(IDLE_ALARM_NAME);
-    chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID); // <<< ADDED
+    if (focusTabId !== null) {
+      chrome.tabs.query(
+        { active: true, currentWindow: true },
+        function (activeTabs) {
+          if (chrome.runtime.lastError) {
+            console.warn(
+              "Drift: Error querying active tab upon becoming active:",
+              chrome.runtime.lastError.message
+            );
+            chrome.notifications.clear(
+              IDLE_RETURN_NOTIFICATION_ID,
+              (wasCleared) => {
+                if (wasCleared)
+                  console.log(
+                    "Drift: Idle notification cleared due to activity (active tab query error)."
+                  );
+              }
+            );
+            return;
+          }
+          if (
+            activeTabs &&
+            activeTabs.length > 0 &&
+            activeTabs[0].id === focusTabId
+          ) {
+            console.log(
+              "Drift: User became active AND is on the focus tab. Clearing idle notification."
+            );
+            chrome.notifications.clear(
+              IDLE_RETURN_NOTIFICATION_ID,
+              (wasCleared) => {
+                if (wasCleared)
+                  console.log("Drift: Idle notification cleared.");
+              }
+            );
+          } else {
+            console.log(
+              "Drift: User became active BUT is NOT on the focus tab. Idle notification will remain (if visible)."
+            );
+          }
+        }
+      );
+    } else {
+      chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID, (wasCleared) => {
+        if (wasCleared)
+          console.log(
+            "Drift: Idle notification cleared (no focus tab ID during active state check)."
+          );
+      });
+    }
   } else if (newState === "idle" || newState === "locked") {
     chrome.tabs.get(focusTabId, function (tab) {
       if (chrome.runtime.lastError) {
@@ -275,7 +347,7 @@ chrome.idle.onStateChanged.addListener(function (newState) {
           "Drift: User is idle/locked, but focus tab is playing audio. Idle nudge suppressed."
         );
         chrome.alarms.clear(IDLE_ALARM_NAME);
-        chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID); // Clear if it was somehow shown before audio started
+        chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID);
         return;
       }
       console.log(
@@ -312,7 +384,6 @@ chrome.idle.onStateChanged.addListener(function (newState) {
 chrome.tabs.onActivated.addListener(function (activeInfo) {
   console.log("Tab activated:", activeInfo);
   if (focusTabId === null) return;
-
   if (activeInfo.tabId === focusTabId) {
     console.log("Switched TO the focus tab:", focusTabId);
     chrome.alarms.clear(DRIFT_ALARM_NAME, function (wasCleared) {
@@ -339,7 +410,6 @@ chrome.tabs.onActivated.addListener(function (activeInfo) {
     chrome.notifications.clear(
       IDLE_RETURN_NOTIFICATION_ID,
       function (wasCleared) {
-        // <<< ADDED
         if (wasCleared)
           console.log(
             "Background: Idle notification cleared as user returned to focus tab."
@@ -393,8 +463,6 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
         message: `Time to return to: ${focusTabUrl.substring(0, 100)}`,
         priority: 2,
       };
-      // console.log("Drift: About to create tab drift notification with ID:", NOTIFICATION_ID);
-      // console.log("Drift: Notification options:", JSON.stringify(notificationOptions));
       chrome.notifications.create(
         NOTIFICATION_ID,
         notificationOptions,
@@ -426,13 +494,10 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
         )}?`,
         priority: 2,
       };
-      // console.log("Drift: About to create idle return notification with ID:", IDLE_RETURN_NOTIFICATION_ID);
-      // console.log("Drift: Notification options:", JSON.stringify(notificationOptions));
       chrome.notifications.create(
         IDLE_RETURN_NOTIFICATION_ID,
         notificationOptions,
         function (id) {
-          // <<< USE THE CONSTANT
           if (chrome.runtime.lastError) {
             console.error(
               "Drift: Idle Notification error:",
@@ -461,7 +526,7 @@ chrome.tabs.onRemoved.addListener(function (tabId, removeInfo) {
     chrome.alarms.clear(IDLE_ALARM_NAME);
     chrome.notifications.clear(NOTIFICATION_ID);
     chrome.notifications.clear(VIDEO_PAUSE_NOTIFICATION_ID);
-    chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID); // <<< ADDED
+    chrome.notifications.clear(IDLE_RETURN_NOTIFICATION_ID);
     chrome.storage.local.remove(["focusTabId", "focusTabUrl"], () => {
       if (chrome.runtime.lastError)
         console.error(
@@ -479,3 +544,68 @@ chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
     focusTabUrl = changeInfo.url;
   }
 });
+
+// --- NEW LISTENER FOR NOTIFICATION CLICKS (Step 20.2) ---
+chrome.notifications.onClicked.addListener(function (notificationId) {
+  console.log("Drift: Notification clicked:", notificationId);
+
+  if (
+    (notificationId === NOTIFICATION_ID ||
+      notificationId === VIDEO_PAUSE_NOTIFICATION_ID ||
+      notificationId === IDLE_RETURN_NOTIFICATION_ID) &&
+    focusTabId !== null
+  ) {
+    chrome.tabs.get(focusTabId, function (tab) {
+      if (chrome.runtime.lastError || !tab) {
+        console.warn(
+          "Drift: Clicked notification for focus tab, but tab not found (maybe closed or an error occurred):",
+          focusTabId,
+          chrome.runtime.lastError
+            ? chrome.runtime.lastError.message
+            : "Tab query returned no tab."
+        );
+        chrome.notifications.clear(notificationId); // Still clear the clicked notification
+        return;
+      }
+
+      if (tab) {
+        chrome.windows.update(tab.windowId, { focused: true }, function () {
+          if (chrome.runtime.lastError) {
+            console.warn(
+              "Drift: Error focusing window:",
+              tab.windowId,
+              chrome.runtime.lastError.message
+            );
+          }
+          chrome.tabs.update(focusTabId, { active: true }, function () {
+            if (chrome.runtime.lastError) {
+              console.warn(
+                "Drift: Error activating tab:",
+                focusTabId,
+                chrome.runtime.lastError.message
+              );
+            } else {
+              console.log(
+                "Drift: Switched to focus tab:",
+                focusTabId,
+                "after notification click."
+              );
+            }
+            // The general clear below will handle this notificationId
+          });
+        });
+      }
+    });
+  }
+  // Always clear the specific notification that was clicked if it's one of ours.
+  if (
+    notificationId === NOTIFICATION_ID ||
+    notificationId === VIDEO_PAUSE_NOTIFICATION_ID ||
+    notificationId === IDLE_RETURN_NOTIFICATION_ID
+  ) {
+    chrome.notifications.clear(notificationId, function (wasCleared) {
+      // console.log("Drift: Clicked notification", notificationId, "cleared status:", wasCleared);
+    });
+  }
+});
+// --- END OF NOTIFICATION CLICK LISTENER ---
